@@ -1,0 +1,93 @@
+bot.py
+```python
+import os
+import logging
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# El token vendrá de las variables de entorno
+TOKEN = os.environ.get("BOT_TOKEN")
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja el comando /start"""
+    user = update.message.from_user
+    await update.message.reply_text(
+        f'🦅 ¡Hola {user.first_name}! Soy **Price Hawk**\n\n'
+        '📦 **Tu cazador de ofertas personalizado**\n\n'
+        '**¿Cómo funciona?**\n'
+        '1. 📤 Envíame un enlace de Amazon\n'
+        '2. 💰 Dime a qué precio quieres que te avise\n'
+        '3. 🔔 ¡Te notificaré cuando baje!\n\n'
+        '¡Envía un enlace para comenzar!'
+    )
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja los mensajes de texto"""
+    user_text = update.message.text
+    user_id = update.message.from_user.id
+    
+    # Si es un enlace de producto
+    if 'amazon' in user_text.lower() or 'mercadolibre' in user_text.lower():
+        context.user_data['pending_url'] = user_text
+        await update.message.reply_text(
+            '✅ ¡Enlace guardado! ¿A qué precio quieres que te avise?\n'
+            '**Ejemplo:** 1500 o 299.99'
+        )
+    
+    # Si es un número (precio)
+    elif user_text.replace('.', '').replace(',', '').isdigit():
+        if 'pending_url' in context.user_data:
+            precio = float(user_text.replace(',', '.'))
+            url = context.user_data['pending_url']
+            
+            # Aquí guardaríamos en base de datos (lo implementaremos después)
+            logger.info(f"Usuario {user_id} guardó: {url} a precio ${precio}")
+            
+            await update.message.reply_text(
+                f'🎯 **¡Configurado!**\n\n'
+                f'Te avisaré cuando el producto baje de **${precio:.2f}**\n\n'
+                f'Puedes agregar más productos enviando otro enlace.'
+            )
+            del context.user_data['pending_url']
+        else:
+            await update.message.reply_text('Primero envía un enlace de producto')
+    else:
+        await update.message.reply_text(
+            '¡Hola! 👋\n\n'
+            'Para comenzar, envíame un enlace de:\n'
+            '• 📦 Amazon\n' 
+            '• 🛒 Mercado Libre\n\n'
+            'Y te ayudo a monitorear el precio.'
+        )
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja errores"""
+    logger.error(f"Error: {context.error}")
+
+def main():
+    """Función principal"""
+    if not TOKEN:
+        logger.error("❌ No se encontró BOT_TOKEN en variables de entorno")
+        return
+    
+    # Crear aplicación
+    application = Application.builder().token(TOKEN).build()
+    
+    # Manejar comandos
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Manejar errores
+    application.add_error_handler(error_handler)
+    
+    # Iniciar bot
+    logger.info("🤖 Price Hawk iniciado...")
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
+```
